@@ -85,349 +85,48 @@ input.ext{border-color:#9FE1CB}
   </div>
 </div>
 <div class="toast" id="toast"></div>
- 
 <script>
-const GAS = "https://script.google.com/macros/s/AKfycbzSgQJmYdxHRAKlN9iHV62tNAHWA1PxcDqL-7jb79Z2SxoQnPMU643Or65GvU-xKy2d/exec";
- 
-/* ── JSONP 통신 (CORS 완전 우회) ── */
-let cbIdx = 0;
-function jsonp(url) {
-  return new Promise((resolve, reject) => {
-    const cb = "__gcb" + (cbIdx++);
-    const s = document.createElement("script");
-    const timer = setTimeout(() => {
-      cleanup(); reject(new Error("timeout"));
-    }, 10000);
-    function cleanup() { clearTimeout(timer); delete window[cb]; if (s.parentNode) s.parentNode.removeChild(s); }
-    window[cb] = function(data) { cleanup(); resolve(data); };
-    s.onerror = () => { cleanup(); reject(new Error("script error")); };
-    s.src = url + (url.includes("?") ? "&" : "?") + "callback=" + cb + "&t=" + Date.now();
-    document.head.appendChild(s);
-  });
-}
- 
-async function gasLoad() {
-  const data = await jsonp(GAS);
-  return (data && typeof data === "object" && !data.status) ? data : null;
-}
- 
-async function gasSave(data) {
-  const json = JSON.stringify({ ...data, ts: Date.now() });
-  const encoded = encodeURIComponent(json);
-  const result = await jsonp(GAS + "?data=" + encoded);
-  return result && result.status === "ok";
-}
- 
-/* ── 데이터 ── */
-const PAL=[
-  {f:"#378ADD",bg:"#E6F1FB",tc:"#0C447C"},{f:"#7F77DD",bg:"#EEEDFE",tc:"#3C3489"},
-  {f:"#1D9E75",bg:"#E1F5EE",tc:"#085041"},{f:"#EF9F27",bg:"#FAEEDA",tc:"#633806"},
-  {f:"#D85A30",bg:"#FAECE7",tc:"#712B13"},{f:"#D4537E",bg:"#FBEAF0",tc:"#72243E"},
-  {f:"#639922",bg:"#EAF3DE",tc:"#27500A"},{f:"#888780",bg:"#F1EFE8",tc:"#444441"},
-];
-const T0=[
-  {id:"sales",n:"영업팀",d:8,...PAL[0]},{id:"dev",n:"개발팀",d:12,...PAL[1]},
-  {id:"hr",n:"인사팀",d:5,...PAL[2]},{id:"finance",n:"재무팀",d:7,...PAL[3]},
-  {id:"mktg",n:"마케팅팀",d:6,...PAL[4]},{id:"ops",n:"운영팀",d:9,...PAL[5]},
-  {id:"it",n:"IT팀",d:10,...PAL[6]},{id:"mgmt",n:"경영지원팀",d:4,...PAL[7]},
-];
+const GAS="https://script.google.com/macros/s/AKfycbzSgQJmYdxHRAKlN9iHV62tNAHWA1PxcDqL-7jb79Z2SxoQnPMU643Or65GvU-xKy2d/exec";
+let cbIdx=0;
+function jsonp(url){return new Promise((resolve,reject)=>{const cb="__cb"+(cbIdx++);const s=document.createElement("script");const t=setTimeout(()=>{cleanup();reject(new Error("timeout"));},12000);function cleanup(){clearTimeout(t);delete window[cb];if(s.parentNode)s.parentNode.removeChild(s);}window[cb]=function(d){cleanup();resolve(d);};s.onerror=()=>{cleanup();reject(new Error("err"));};s.src=url+(url.includes("?")?"&":"?")+"callback="+cb+"&t="+Date.now();document.head.appendChild(s);});}
+async function gasLoad(){try{const d=await jsonp(GAS);return(d&&typeof d==="object"&&!d.status)?d:null;}catch(e){return null;}}
+async function gasSave(data){try{const json=JSON.stringify({...data,ts:Date.now()});const r=await jsonp(GAS+"?data="+encodeURIComponent(json));return r&&r.status==="ok";}catch(e){return false;}}
+const PAL=[{f:"#378ADD",bg:"#E6F1FB",tc:"#0C447C"},{f:"#7F77DD",bg:"#EEEDFE",tc:"#3C3489"},{f:"#1D9E75",bg:"#E1F5EE",tc:"#085041"},{f:"#EF9F27",bg:"#FAEEDA",tc:"#633806"},{f:"#D85A30",bg:"#FAECE7",tc:"#712B13"},{f:"#D4537E",bg:"#FBEAF0",tc:"#72243E"},{f:"#639922",bg:"#EAF3DE",tc:"#27500A"},{f:"#888780",bg:"#F1EFE8",tc:"#444441"}];
+const T0=[{id:"sales",n:"영업팀",d:8,...PAL[0]},{id:"dev",n:"개발팀",d:12,...PAL[1]},{id:"hr",n:"인사팀",d:5,...PAL[2]},{id:"finance",n:"재무팀",d:7,...PAL[3]},{id:"mktg",n:"마케팅팀",d:6,...PAL[4]},{id:"ops",n:"운영팀",d:9,...PAL[5]},{id:"it",n:"IT팀",d:10,...PAL[6]},{id:"mgmt",n:"경영지원팀",d:4,...PAL[7]}];
 const WD=["일","월","화","수","목","금","토"];
- 
-function workDates(){
-  const r=[],b=new Date();
-  for(let i=0;r.length<10;i++){const d=new Date(b);d.setDate(b.getDate()+i);if(d.getDay()&&d.getDay()<6)r.push(d);}
-  return r;
-}
-const DATES=workDates();
-const DK=DATES.map(d=>d.toISOString().slice(0,10));
- 
-let DATA=null, PAGE="main", TID=null, POLL=null, SAVEQ=null, LATEST=null, PALSEL=0, DELID=null;
- 
-function mkData(){
-  const o={teams:{},order:T0.map(t=>t.id),ts:Date.now()};
-  T0.forEach(t=>{o.teams[t.id]={n:t.n,d:t.d,f:t.f,bg:t.bg,tc:t.tc,days:{}};DK.forEach(k=>{o.teams[t.id].days[k]={c:t.d,e:0};});});
-  return o;
-}
-function fix(o){
-  if(!o||!o.teams)return mkData();
-  if(!o.order)o.order=Object.keys(o.teams);
-  Object.keys(o.teams).forEach(id=>{const t=o.teams[id];if(!t.days)t.days={};DK.forEach(k=>{if(!t.days[k])t.days[k]={c:t.d||0,e:0};});});
-  return o;
-}
+function workDates(){const r=[],b=new Date();for(let i=0;r.length<10;i++){const d=new Date(b);d.setDate(b.getDate()+i);if(d.getDay()&&d.getDay()<6)r.push(d);}return r;}
+const DATES=workDates(),DK=DATES.map(d=>d.toISOString().slice(0,10));
+let DATA=null,PAGE="main",TID=null,POLL=null,SAVEQ=null,LATEST=null,PALSEL=0,DELID_P=null;
+function mkData(){const o={teams:{},order:T0.map(t=>t.id),ts:Date.now()};T0.forEach(t=>{o.teams[t.id]={n:t.n,d:t.d,f:t.f,bg:t.bg,tc:t.tc,days:{}};DK.forEach(k=>{o.teams[t.id].days[k]={c:t.d,e:0};});});return o;}
+function fix(o){if(!o||!o.teams)return mkData();if(!o.order)o.order=Object.keys(o.teams);Object.keys(o.teams).forEach(id=>{const t=o.teams[id];if(!t.days)t.days={};DK.forEach(k=>{if(!t.days[k])t.days[k]={c:t.d||0,e:0};});});return o;}
 const cp=o=>JSON.parse(JSON.stringify(o));
 const ab=n=>{const s=(n||"").replace(/팀$/,"").replace(/\s/g,"");return s.slice(0,2)||"?";};
 const tSum=(D,id)=>{const t=D.teams[id];if(!t)return 0;return DK.reduce((s,k)=>s+(t.days[k]?t.days[k].c+t.days[k].e:0),0);};
 const dSum=(D,dk)=>(D.order||[]).reduce((s,id)=>{const t=D.teams[id];return s+(t&&t.days&&t.days[dk]?t.days[dk].c+t.days[dk].e:0);},0);
- 
 function showToast(m,ms=2400){const el=document.getElementById("toast");el.textContent=m;el.classList.add("show");setTimeout(()=>el.classList.remove("show"),ms);}
 function setPill(t,c){const p=document.getElementById("pill");if(!p)return;p.querySelector(".pill-dot").style.background=c;p.querySelector(".pill-txt").textContent=t;}
 function pillHTML(){return`<span class="pill" id="pill"><span class="pill-dot" style="background:#1D9E75"></span><span class="pill-txt">연동됨</span></span>`;}
- 
-/* ── 저장 (debounce 800ms) ── */
-function qsave(nd){
-  LATEST=nd;
-  if(SAVEQ)clearTimeout(SAVEQ);
-  setPill("저장중...","#EF9F27");
-  SAVEQ=setTimeout(async()=>{
-    const toSave=LATEST;
-    let ok=false;
-    try{ ok=await gasSave(toSave); }catch(e){ ok=false; }
-    if(ok){
-      DATA.ts=toSave.ts;
-      setPill("저장됨 ✓","#1D9E75");
-      setTimeout(()=>setPill("연동됨","#1D9E75"),1500);
-    } else {
-      // 1회 재시도
-      setTimeout(async()=>{
-        let ok2=false;
-        try{ ok2=await gasSave(LATEST); }catch(_){}
-        setPill(ok2?"연동됨":"저장실패 ⚠", ok2?"#1D9E75":"#E24B4A");
-        if(!ok2) showToast("저장 실패 — 다시 시도합니다");
-        else DATA.ts=LATEST.ts;
-      },2000);
-    }
-  },800);
-}
- 
+function qsave(nd){LATEST=nd;if(SAVEQ)clearTimeout(SAVEQ);setPill("저장중...","#EF9F27");SAVEQ=setTimeout(async()=>{const s=LATEST;const ok=await gasSave(s);if(ok){DATA.ts=s.ts;setPill("저장됨 ✓","#1D9E75");setTimeout(()=>setPill("연동됨","#1D9E75"),1500);}else{setTimeout(async()=>{const ok2=await gasSave(LATEST);setPill(ok2?"연동됨":"저장실패 ⚠",ok2?"#1D9E75":"#E24B4A");if(ok2)DATA.ts=LATEST.ts;else showToast("저장 실패 — 다시 시도합니다");},2000);}},800);}
 function upd(fn){const nd=cp(DATA);fn(nd);nd.ts=Date.now();DATA=nd;qsave(nd);render();}
- 
-async function boot(){
-  try{
-    let d=await gasLoad();
-    if(!d){d=mkData();try{await gasSave(d);}catch(_){}}else fix(d);
-    DATA=d;LATEST=d;
-  }catch(e){
-    DATA=mkData();LATEST=DATA;
-    showToast("서버 연결 실패 — 로컬 모드");
-  }
-  render();
-  POLL=setInterval(async()=>{
-    try{
-      const r=await gasLoad();
-      if(r&&(r.ts||0)>(DATA.ts||0)){DATA=fix(r);LATEST=DATA;render();setPill("연동됨","#1D9E75");}
-    }catch(_){}
-  },6000);
-}
- 
-/* ═══════════════ RENDER ═══════════════ */
-function render(){
-  if(PAGE==="main")renderMain();
-  else if(PAGE==="team")renderTeam();
-  else if(PAGE==="add")renderAdd();
-}
- 
-function renderMain(){
-  const order=DATA.order||[];
-  const tots=order.map(id=>tSum(DATA,id));
-  const gt=tots.reduce((a,b)=>a+b,0);
-  const tod=order.reduce((s,id)=>{const t=DATA.teams[id];return s+(t&&t.days&&t.days[DK[0]]?t.days[DK[0]].c+t.days[DK[0]].e:0);},0);
-  const mx=Math.max(...tots,1);
- 
-  let cards="";
-  order.forEach((id,i)=>{
-    const t=DATA.teams[id];if(!t)return;
-    cards+=`<div class="team-card" onclick="openTeam('${id}')">
-      <div class="team-icon" style="background:${t.f}">${ab(t.n)}</div>
-      <span class="team-name">${t.n}</span>
-      <span class="team-count">${tots[i].toLocaleString()}명</span>
-      <div class="team-bar-wrap"><div class="team-bar" style="width:${Math.round(tots[i]/mx*100)}%;background:${t.f}"></div></div>
-    </div>`;
-  });
- 
-  document.getElementById("app").innerHTML=`
-    <div class="hdr">
-      <div><div class="hdr-sub">구내식당</div><div class="hdr-title">식수 관리</div></div>
-      ${pillHTML()}
-      <span class="spacer"></span>
-      <button class="btn btn-teal" onclick="copyShare()">공유</button>
-      <button class="btn" onclick="goAdd()">＋</button>
-    </div>
-    <div class="summary">
-      <div class="card-blue">
-        <div class="card-lbl" style="color:#85B7EB">오늘 식수</div>
-        <div class="card-num" style="color:#fff">${tod}<span style="font-size:13px;font-weight:400;color:#85B7EB;margin-left:5px">명</span></div>
-        <div class="card-sub" style="color:#5B9DD6">${DATES[0].getMonth()+1}/${DATES[0].getDate()} (${WD[DATES[0].getDay()]})</div>
-      </div>
-      <div class="card-white">
-        <div class="card-lbl" style="color:#bbb">2주 합계</div>
-        <div class="card-num">${gt.toLocaleString()}<span style="font-size:13px;font-weight:400;color:#ccc;margin-left:5px">명</span></div>
-        <div class="card-sub" style="color:#bbb">일 평균 ${Math.round(gt/DATES.length)}명</div>
-      </div>
-    </div>
-    <div class="all-btn" onclick="openTeam('all')">
-      <span style="font-size:22px">📊</span>
-      <div style="flex:1"><div style="font-size:13px;font-weight:600;color:#fff">전체팀 집계 조회</div><div style="font-size:11px;color:#666;margin-top:1px">팀별 · 일자별 · 전체 합계</div></div>
-      <span style="font-size:18px;color:#444">›</span>
-    </div>
-    <div class="sec-lbl">팀 선택 — 인원 입력</div>
-    <div class="grid">${cards}</div>`;
-}
- 
+async function boot(){try{let d=await gasLoad();if(!d){d=mkData();await gasSave(d);}else fix(d);DATA=d;LATEST=d;}catch(e){DATA=mkData();LATEST=DATA;showToast("서버 연결 실패");}render();POLL=setInterval(async()=>{try{const r=await gasLoad();if(r&&(r.ts||0)>(DATA.ts||0)){DATA=fix(r);LATEST=DATA;render();setPill("연동됨","#1D9E75");}}catch(_){}},6000);}
+function render(){if(PAGE==="main")renderMain();else if(PAGE==="team")renderTeam();else if(PAGE==="add")renderAdd();}
+function renderMain(){const order=DATA.order||[];const tots=order.map(id=>tSum(DATA,id));const gt=tots.reduce((a,b)=>a+b,0);const tod=order.reduce((s,id)=>{const t=DATA.teams[id];return s+(t&&t.days&&t.days[DK[0]]?t.days[DK[0]].c+t.days[DK[0]].e:0);},0);const mx=Math.max(...tots,1);let cards="";order.forEach((id,i)=>{const t=DATA.teams[id];if(!t)return;cards+=`<div class="team-card" onclick="openTeam('${id}')"><div class="team-icon" style="background:${t.f}">${ab(t.n)}</div><span class="team-name">${t.n}</span><span class="team-count">${tots[i].toLocaleString()}명</span><div class="team-bar-wrap"><div class="team-bar" style="width:${Math.round(tots[i]/mx*100)}%;background:${t.f}"></div></div></div>`;});document.getElementById("app").innerHTML=`<div class="hdr"><div><div class="hdr-sub">구내식당</div><div class="hdr-title">식수 관리</div></div>${pillHTML()}<span class="spacer"></span><button class="btn btn-teal" onclick="copyShare()">공유</button><button class="btn" onclick="goAdd()">＋</button></div><div class="summary"><div class="card-blue"><div class="card-lbl" style="color:#85B7EB">오늘 식수</div><div class="card-num" style="color:#fff">${tod}<span style="font-size:13px;font-weight:400;color:#85B7EB;margin-left:5px">명</span></div><div class="card-sub" style="color:#5B9DD6">${DATES[0].getMonth()+1}/${DATES[0].getDate()} (${WD[DATES[0].getDay()]})</div></div><div class="card-white"><div class="card-lbl" style="color:#bbb">2주 합계</div><div class="card-num">${gt.toLocaleString()}<span style="font-size:13px;font-weight:400;color:#ccc;margin-left:5px">명</span></div><div class="card-sub" style="color:#bbb">일 평균 ${Math.round(gt/DATES.length)}명</div></div></div><div class="all-btn" onclick="openTeam('all')"><span style="font-size:22px">📊</span><div style="flex:1"><div style="font-size:13px;font-weight:600;color:#fff">전체팀 집계 조회</div><div style="font-size:11px;color:#666;margin-top:1px">팀별 · 일자별 · 전체 합계</div></div><span style="font-size:18px;color:#444">›</span></div><div class="sec-lbl">팀 선택 — 인원 입력</div><div class="grid">${cards}</div>`;}
 function openTeam(id){TID=id;PAGE="team";render();}
- 
-function renderTeam(){
-  const isAll=TID==="all";
-  const t=isAll?null:DATA.teams[TID];
-  const order=DATA.order||[];
-  const gt2=DK.reduce((s,k)=>s+dSum(DATA,k),0);
-  const td2=dSum(DATA,DK[0]);
- 
-  let content="";
-  if(isAll){
-    const sc=[
-      {l:"2주 전체",v:`${gt2.toLocaleString()}명`,bg:"#0C447C",lc:"#85B7EB",vc:"#fff"},
-      {l:"오늘",v:`${td2}명`,bg:"#E1F5EE",lc:"#0F6E56",vc:"#085041"},
-      {l:"일 평균",v:`${Math.round(gt2/DK.length)}명`,bg:"#FAEEDA",lc:"#854F0B",vc:"#633806"},
-    ];
-    let sum=`<div class="sum3">`;
-    sc.forEach(c=>{sum+=`<div class="sum-card" style="background:${c.bg}"><div style="font-size:10px;color:${c.lc};margin-bottom:2px">${c.l}</div><div style="font-size:18px;font-weight:700;color:${c.vc}">${c.v}</div></div>`;});
-    sum+="</div>";
- 
-    let hdr=`<tr><th style="text-align:left;min-width:75px">팀</th><th style="text-align:left;min-width:44px">구분</th>`;
-    DATES.forEach(d=>{hdr+=`<th>${(d.getMonth()+1)}/${d.getDate()}<br>(${WD[d.getDay()]})</th>`;});
-    hdr+="<th>합계</th></tr>";
- 
-    let totRow=`<tr><td colspan="2" class="tt tl">전체 합계</td>`;
-    DK.forEach(k=>{totRow+=`<td class="tt">${dSum(DATA,k)}</td>`;});
-    totRow+=`<td class="tt-blue">${gt2}</td></tr>`;
- 
-    let tbody="";
-    order.forEach(id=>{
-      const t2=DATA.teams[id];if(!t2)return;
-      let cs=0,es=0;
-      let r1=`<tr><td class="tl" style="font-weight:600;color:#1a1a1a" rowspan="2"><span style="display:inline-flex;align-items:center;gap:5px"><span style="width:6px;height:6px;border-radius:50%;background:${t2.f};display:inline-block"></span>${t2.n}</span></td><td class="tl">기본</td>`;
-      DK.forEach(k=>{const v=t2.days&&t2.days[k]?t2.days[k].c:t2.d;cs+=v;r1+=`<td>${v}</td>`;});
-      r1+=`<td class="ts">${cs}</td></tr>`;
-      let r2=`<tr><td class="tl" style="color:#0F6E56">외부</td>`;
-      DK.forEach(k=>{const v=t2.days&&t2.days[k]?t2.days[k].e:0;es+=v;r2+=`<td style="color:#0F6E56">${v>0?"+"+v:v}</td>`;});
-      r2+=`<td class="ts" style="color:#0F6E56">${es>0?"+"+es:es}</td></tr>`;
-      tbody+=r1+r2;
-    });
-    content=`${sum}<div class="tbl-wrap"><table><thead>${hdr}${totRow}</thead><tbody>${tbody}</tbody></table></div>`;
-  } else {
-    let hdr=`<tr><th style="text-align:left;min-width:62px">구분</th>`;
-    DATES.forEach(d=>{hdr+=`<th>${(d.getMonth()+1)}/${d.getDate()}<br>(${WD[d.getDay()]})</th>`;});
-    hdr+="<th>합계</th></tr>";
- 
-    let cs=0,es=0;
-    let r1=`<tr><td class="tl" style="color:#1a1a1a">기본 인원</td>`;
-    let r2=`<tr><td class="tl" style="color:#0F6E56">외부 식수</td>`;
-    let r3=`<tr><td class="tb">합계</td>`;
-    DK.forEach(k=>{
-      const cv=t.days&&t.days[k]?t.days[k].c:t.d;
-      const ev=t.days&&t.days[k]?t.days[k].e:0;
-      cs+=cv;es+=ev;
-      r1+=`<td><input type="number" min="0" value="${cv}" oninput="cellChange('${k}','c',this.value)"></td>`;
-      r2+=`<td><input type="number" min="0" class="ext" value="${ev}" oninput="cellChange('${k}','e',this.value)"></td>`;
-      r3+=`<td id="tot_${k}">${cv+ev}</td>`;
-    });
-    r1+=`<td class="ts" id="csum">${cs}</td></tr>`;
-    r2+=`<td class="ts" style="color:#0F6E56" id="esum">${es>0?"+"+es:es}</td></tr>`;
-    r3+=`<td class="tb" id="tsum">${cs+es}</td></tr>`;
-    content=`<div class="tbl-wrap"><table><thead>${hdr}</thead><tbody>${r1}${r2}${r3}</tbody></table></div>`;
-  }
- 
-  const iconH=isAll?"":`<div class="team-icon-sm" style="background:${t.f}">${ab(t.n)}</div>`;
-  const defH=isAll?"":`<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:#666">
-    기본 인원: <input type="number" min="0" id="defInp" value="${t.d}" style="width:52px;padding:4px 6px;border:0.5px solid #ddd;border-radius:6px;font-size:13px;text-align:center;outline:none;color:#1a1a1a">
-    <button class="btn btn-blue" onclick="applyDef()">전체 적용</button>
-  </div>`;
- 
-  document.getElementById("app").innerHTML=`
-    <button class="back-btn" onclick="goMain()">← 메인</button>
-    <div class="page-hdr">
-      <div style="display:flex;align-items:center;gap:10px">
-        ${iconH}
-        <div><div style="font-size:16px;font-weight:700">${isAll?"전체팀 집계":t.n}</div>
-        <div style="font-size:11px;color:#aaa">${isAll?"조회 전용":`기본 ${t.d}명/일`}</div></div>
-      </div>
-      ${defH}
-    </div>
-    ${pillHTML()}
-    <div style="margin-top:10px">${content}`;
-}
- 
-function cellChange(k,f,raw){
-  const v=Math.max(0,parseInt(raw)||0);
-  if(!DATA.teams[TID].days[k])DATA.teams[TID].days[k]={c:DATA.teams[TID].d,e:0};
-  DATA.teams[TID].days[k][f]=v;
-  DATA.ts=Date.now();
-  updateSums();
-  qsave(DATA);
-}
-function updateSums(){
-  const t=DATA.teams[TID];if(!t)return;
-  let cs=0,es=0;
-  DK.forEach(k=>{
-    const cv=t.days&&t.days[k]?t.days[k].c:t.d;
-    const ev=t.days&&t.days[k]?t.days[k].e:0;
-    cs+=cv;es+=ev;
-    const el=document.getElementById("tot_"+k);if(el)el.textContent=cv+ev;
-  });
-  const c2=document.getElementById("csum");if(c2)c2.textContent=cs;
-  const e2=document.getElementById("esum");if(e2)e2.textContent=es>0?"+"+es:es;
-  const t2=document.getElementById("tsum");if(t2)t2.textContent=cs+es;
-}
-function applyDef(){
-  const v=parseInt(document.getElementById("defInp").value)||0;
-  upd(d=>{d.teams[TID].d=v;DK.forEach(k=>{if(d.teams[TID].days[k])d.teams[TID].days[k].c=v;});});
-  showToast(`기본 ${v}명 전체 적용`);
-}
- 
+function renderTeam(){const isAll=TID==="all";const t=isAll?null:DATA.teams[TID];const order=DATA.order||[];const gt2=DK.reduce((s,k)=>s+dSum(DATA,k),0);const td2=dSum(DATA,DK[0]);let content="";if(isAll){const sc=[{l:"2주 전체",v:`${gt2.toLocaleString()}명`,bg:"#0C447C",lc:"#85B7EB",vc:"#fff"},{l:"오늘",v:`${td2}명`,bg:"#E1F5EE",lc:"#0F6E56",vc:"#085041"},{l:"일 평균",v:`${Math.round(gt2/DK.length)}명`,bg:"#FAEEDA",lc:"#854F0B",vc:"#633806"}];let sum=`<div class="sum3">`;sc.forEach(c=>{sum+=`<div class="sum-card" style="background:${c.bg}"><div style="font-size:10px;color:${c.lc};margin-bottom:2px">${c.l}</div><div style="font-size:18px;font-weight:700;color:${c.vc}">${c.v}</div></div>`;});sum+="</div>";let hdr=`<tr><th style="text-align:left;min-width:75px">팀</th><th style="text-align:left;min-width:44px">구분</th>`;DATES.forEach(d=>{hdr+=`<th>${(d.getMonth()+1)}/${d.getDate()}<br>(${WD[d.getDay()]})</th>`;});hdr+="<th>합계</th></tr>";let totRow=`<tr><td colspan="2" class="tt tl">전체 합계</td>`;DK.forEach(k=>{totRow+=`<td class="tt">${dSum(DATA,k)}</td>`;});totRow+=`<td class="tt-blue">${gt2}</td></tr>`;let tbody="";order.forEach(id=>{const t2=DATA.teams[id];if(!t2)return;let cs=0,es=0;let r1=`<tr><td class="tl" style="font-weight:600;color:#1a1a1a" rowspan="2"><span style="display:inline-flex;align-items:center;gap:5px"><span style="width:6px;height:6px;border-radius:50%;background:${t2.f};display:inline-block"></span>${t2.n}</span></td><td class="tl">기본</td>`;DK.forEach(k=>{const v=t2.days&&t2.days[k]?t2.days[k].c:t2.d;cs+=v;r1+=`<td>${v}</td>`;});r1+=`<td class="ts">${cs}</td></tr>`;let r2=`<tr><td class="tl" style="color:#0F6E56">외부</td>`;DK.forEach(k=>{const v=t2.days&&t2.days[k]?t2.days[k].e:0;es+=v;r2+=`<td style="color:#0F6E56">${v>0?"+"+v:v}</td>`;});r2+=`<td class="ts" style="color:#0F6E56">${es>0?"+"+es:es}</td></tr>`;tbody+=r1+r2;});content=`${sum}<div class="tbl-wrap"><table><thead>${hdr}${totRow}</thead><tbody>${tbody}</tbody></table></div>`;}else{let hdr=`<tr><th style="text-align:left;min-width:62px">구분</th>`;DATES.forEach(d=>{hdr+=`<th>${(d.getMonth()+1)}/${d.getDate()}<br>(${WD[d.getDay()]})</th>`;});hdr+="<th>합계</th></tr>";let cs=0,es=0;let r1=`<tr><td class="tl" style="color:#1a1a1a">기본 인원</td>`;let r2=`<tr><td class="tl" style="color:#0F6E56">외부 식수</td>`;let r3=`<tr><td class="tb">합계</td>`;DK.forEach(k=>{const cv=t.days&&t.days[k]?t.days[k].c:t.d;const ev=t.days&&t.days[k]?t.days[k].e:0;cs+=cv;es+=ev;r1+=`<td><input type="number" min="0" value="${cv}" oninput="cellChange('${k}','c',this.value)"></td>`;r2+=`<td><input type="number" min="0" class="ext" value="${ev}" oninput="cellChange('${k}','e',this.value)"></td>`;r3+=`<td id="tot_${k}">${cv+ev}</td>`;});r1+=`<td class="ts" id="csum">${cs}</td></tr>`;r2+=`<td class="ts" style="color:#0F6E56" id="esum">${es>0?"+"+es:es}</td></tr>`;r3+=`<td class="tb" id="tsum">${cs+es}</td></tr>`;content=`<div class="tbl-wrap"><table><thead>${hdr}</thead><tbody>${r1}${r2}${r3}</tbody></table></div>`;}const iconH=isAll?"":`<div class="team-icon-sm" style="background:${t.f}">${ab(t.n)}</div>`;const defH=isAll?"":`<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:#666">기본 인원:<input type="number" min="0" id="defInp" value="${t.d}" style="width:52px;padding:4px 6px;border:0.5px solid #ddd;border-radius:6px;font-size:13px;text-align:center;outline:none;color:#1a1a1a"><button class="btn btn-blue" onclick="applyDef()">전체 적용</button></div>`;document.getElementById("app").innerHTML=`<button class="back-btn" onclick="goMain()">← 메인</button><div class="page-hdr"><div style="display:flex;align-items:center;gap:10px">${iconH}<div><div style="font-size:16px;font-weight:700">${isAll?"전체팀 집계":t.n}</div><div style="font-size:11px;color:#aaa">${isAll?"조회 전용":`기본 ${t.d}명/일`}</div></div></div>${defH}</div>${pillHTML()}<div style="margin-top:10px">${content}`;}
+function cellChange(k,f,raw){const v=Math.max(0,parseInt(raw)||0);if(!DATA.teams[TID].days[k])DATA.teams[TID].days[k]={c:DATA.teams[TID].d,e:0};DATA.teams[TID].days[k][f]=v;DATA.ts=Date.now();updateSums();qsave(DATA);}
+function updateSums(){const t=DATA.teams[TID];if(!t)return;let cs=0,es=0;DK.forEach(k=>{const cv=t.days&&t.days[k]?t.days[k].c:t.d;const ev=t.days&&t.days[k]?t.days[k].e:0;cs+=cv;es+=ev;const el=document.getElementById("tot_"+k);if(el)el.textContent=cv+ev;});const c2=document.getElementById("csum");if(c2)c2.textContent=cs;const e2=document.getElementById("esum");if(e2)e2.textContent=es>0?"+"+es:es;const t2=document.getElementById("tsum");if(t2)t2.textContent=cs+es;}
+function applyDef(){const v=parseInt(document.getElementById("defInp").value)||0;upd(d=>{d.teams[TID].d=v;DK.forEach(k=>{if(d.teams[TID].days[k])d.teams[TID].days[k].c=v;});});showToast(`기본 ${v}명 전체 적용`);}
 function goAdd(){PAGE="add";renderAdd();}
-function renderAdd(){
-  const dots=PAL.map((p,i)=>`<div class="pal-dot${i===PALSEL?" sel":""}" style="background:${p.f}" onclick="selPal(${i})"></div>`).join("");
-  document.getElementById("app").innerHTML=`
-    <button class="back-btn" onclick="goMain()">← 메인</button>
-    <div style="font-size:14px;font-weight:600;margin-bottom:10px">새 팀 추가</div>
-    <div class="add-form">
-      <div class="add-row">
-        <div class="add-field"><span>팀명</span><input id="aN" style="width:110px" placeholder="팀명" oninput="updatePreview()"></div>
-        <div class="add-field"><span>기본 인원</span><input id="aD" type="number" min="0" style="width:72px;text-align:center" placeholder="0"></div>
-        <div class="add-field"><span>색상</span><div class="pal-row" id="palRow">${dots}</div></div>
-      </div>
-      <div id="preview" style="display:none" class="preview">
-        <div id="prevIcon" style="width:44px;height:44px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#fff"></div>
-        <div><div id="prevName" style="font-size:13px;font-weight:600"></div><div id="prevDef" style="font-size:11px;color:#aaa"></div></div>
-      </div>
-      <button class="btn btn-green" style="width:100%;padding:12px 0;text-align:center;font-size:13px" onclick="addTeam()">+ 팀 추가</button>
-    </div>`;
-}
+function renderAdd(){const dots=PAL.map((p,i)=>`<div class="pal-dot${i===PALSEL?" sel":""}" style="background:${p.f}" onclick="selPal(${i})"></div>`).join("");document.getElementById("app").innerHTML=`<button class="back-btn" onclick="goMain()">← 메인</button><div style="font-size:14px;font-weight:600;margin-bottom:10px">새 팀 추가</div><div class="add-form"><div class="add-row"><div class="add-field"><span>팀명</span><input id="aN" style="width:110px" placeholder="팀명" oninput="updatePreview()"></div><div class="add-field"><span>기본 인원</span><input id="aD" type="number" min="0" style="width:72px;text-align:center" placeholder="0"></div><div class="add-field"><span>색상</span><div class="pal-row" id="palRow">${dots}</div></div></div><div id="preview" style="display:none" class="preview"><div id="prevIcon" style="width:44px;height:44px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#fff"></div><div><div id="prevName" style="font-size:13px;font-weight:600"></div><div id="prevDef" style="font-size:11px;color:#aaa"></div></div></div><button class="btn btn-green" style="width:100%;padding:12px 0;text-align:center;font-size:13px" onclick="addTeam()">+ 팀 추가</button></div>`;}
 function selPal(i){PALSEL=i;document.querySelectorAll(".pal-dot").forEach((d,j)=>d.classList.toggle("sel",j===i));updatePreview();}
-function updatePreview(){
-  const n=(document.getElementById("aN")?.value||"").trim();
-  const dv=document.getElementById("aD")?.value||"0";
-  const p=document.getElementById("preview");if(!p)return;
-  if(n){
-    p.style.display="flex";
-    document.getElementById("prevIcon").style.background=PAL[PALSEL].f;
-    document.getElementById("prevIcon").textContent=ab(n);
-    document.getElementById("prevName").textContent=n;
-    document.getElementById("prevDef").textContent=`기본 ${parseInt(dv)||0}명/일`;
-  }else p.style.display="none";
-}
-function addTeam(){
-  const n=(document.getElementById("aN")?.value||"").trim();
-  const dv=parseInt(document.getElementById("aD")?.value)||0;
-  if(!n){showToast("팀명을 입력하세요");return;}
-  const id="t_"+Date.now();const p=PAL[PALSEL];
-  upd(d=>{d.teams[id]={n,d:dv,f:p.f,bg:p.bg,tc:p.tc,days:{}};DK.forEach(k=>{d.teams[id].days[k]={c:dv,e:0};});d.order.push(id);});
-  showToast(`"${n}" 팀 추가됨`);PAGE="main";render();
-}
- 
+function updatePreview(){const n=(document.getElementById("aN")?.value||"").trim();const dv=document.getElementById("aD")?.value||"0";const p=document.getElementById("preview");if(!p)return;if(n){p.style.display="flex";document.getElementById("prevIcon").style.background=PAL[PALSEL].f;document.getElementById("prevIcon").textContent=ab(n);document.getElementById("prevName").textContent=n;document.getElementById("prevDef").textContent=`기본 ${parseInt(dv)||0}명/일`;}else p.style.display="none";}
+function addTeam(){const n=(document.getElementById("aN")?.value||"").trim();const dv=parseInt(document.getElementById("aD")?.value)||0;if(!n){showToast("팀명을 입력하세요");return;}const id="t_"+Date.now();const p=PAL[PALSEL];upd(d=>{d.teams[id]={n,d:dv,f:p.f,bg:p.bg,tc:p.tc,days:{}};DK.forEach(k=>{d.teams[id].days[k]={c:dv,e:0};});d.order.push(id);});showToast(`"${n}" 팀 추가됨`);PAGE="main";render();}
 function goMain(){PAGE="main";render();}
-function copyShare(){
-  navigator.clipboard?.writeText("[구내식당 식수 입력]\n아래 링크를 열어 팀 선택 후 인원을 입력해 주세요.\n(Claude 채팅 링크를 붙여넣기 하세요)")
-    .then(()=>showToast("복사됨 — 카카오톡에 붙여넣기"));
-}
- 
-let DELID_P=null;
+function copyShare(){const url="https://yangchunggeun-cloud.github.io/canteen/";navigator.clipboard?.writeText("[구내식당 식수 입력 요청]\n아래 링크를 열어 팀 선택 후 인원을 입력해 주세요.\n\n"+url).then(()=>showToast("복사됨 — 카카오톡에 붙여넣기"));}
 function openDelModal(id,name){DELID_P=id;document.getElementById("delMsg").innerHTML=`<strong>${name}</strong> 팀을 삭제할까요?<br><span style="color:#999;font-size:12px">데이터도 모두 삭제됩니다.</span>`;document.getElementById("delModal").classList.add("open");}
 function closeDelModal(){document.getElementById("delModal").classList.remove("open");}
 function confirmDelete(){if(!DELID_P)return;upd(d=>{delete d.teams[DELID_P];d.order=d.order.filter(x=>x!==DELID_P);});closeDelModal();showToast("팀 삭제됨");}
- 
 boot();
 </script>
 </body>
 </html>
- 
